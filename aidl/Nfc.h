@@ -32,6 +32,8 @@ using ::aidl::android::hardware::nfc::NfcConfig;
 using ::aidl::android::hardware::nfc::NfcEvent;
 using ::aidl::android::hardware::nfc::NfcStatus;
 
+static pthread_mutex_t sCallbackLock = PTHREAD_MUTEX_INITIALIZER;
+
 // Default implementation that reports no support NFC.
 struct Nfc : public BnNfc {
  public:
@@ -52,7 +54,11 @@ struct Nfc : public BnNfc {
   binder_status_t dump(int fd, const char** args, uint32_t numArgs) override;
 
   static void eventCallback(uint8_t event, uint8_t status) {
-    if (mCallback != nullptr) {
+    std::shared_ptr<INfcClientCallback> localCallback;
+    pthread_mutex_lock(&sCallbackLock);
+    localCallback = mCallback;
+    pthread_mutex_unlock(&sCallbackLock);
+    if (localCallback != nullptr) {
       NfcEvent mEvent;
       NfcStatus mStatus;
       switch (event) {
@@ -96,7 +102,7 @@ struct Nfc : public BnNfc {
         default:
           mStatus = NfcStatus::FAILED;
       }
-      auto ret = mCallback->sendEvent(mEvent, mStatus);
+      auto ret = localCallback->sendEvent(mEvent, mStatus);
       if (!ret.isOk()) {
         LOG(ERROR) << "Failed to send event!";
       }
@@ -104,9 +110,13 @@ struct Nfc : public BnNfc {
   }
 
   static void dataCallback(uint16_t data_len, uint8_t* p_data) {
+    std::shared_ptr<INfcClientCallback> localCallback;
+    pthread_mutex_lock(&sCallbackLock);
+    localCallback = mCallback;
+    pthread_mutex_unlock(&sCallbackLock);
     std::vector<uint8_t> data(p_data, p_data + data_len);
-    if (mCallback != nullptr) {
-      auto ret = mCallback->sendData(data);
+    if (localCallback != nullptr) {
+      auto ret = localCallback->sendData(data);
       if (!ret.isOk()) {
         LOG(ERROR) << "Failed to send data!";
       }
