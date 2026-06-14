@@ -230,6 +230,12 @@ bool stpropnci_process(bool dir_from_upper, const uint8_t* payload,
     (void)pthread_mutex_unlock(&reentry_lock);
     return ret;
   }
+  if (payloadlen > MAX_NCI_MESSAGE_LEN) {
+    LOG_E("Dropping oversized NCI message: %d > %d", payloadlen,
+          MAX_NCI_MESSAGE_LEN);
+    (void)pthread_mutex_unlock(&reentry_lock);
+    return ret;
+  }
   if (!stpropnci_state.passthrough_mode) {
     if (payloadlen > 3) {
       LOG_D("Processing (hdr:%02hhx%02hhx%02hhx%02hhx)", payload[0], payload[1],
