@@ -686,7 +686,7 @@ bool stpropnci_process_std(bool inform_only, bool dir_from_upper,
         case NCI_MSG_RF_EE_DISCOVERY_REQ:
           if (mt == NCI_MT_NTF) {
             uint8_t idx = 0;
-            if (payloadlen <= NFC_EE_DISCOVER_ENTRY_LEN) {
+            if (payloadlen < 4 + payload[3] * NFC_EE_DISCOVER_ENTRY_LEN) {
               LOG_E("NCI_MSG_RF_EE_DISCOVERY_REQ length too short: %d",
                     payloadlen);
               break;
@@ -705,6 +705,11 @@ bool stpropnci_process_std(bool inform_only, bool dir_from_upper,
                 }
               }
               if (idx == 0xFF) {
+                if (stpropnci_state.nb_ee_info >=
+                    (sizeof(stpropnci_state.ee_info) / sizeof(stpropnci_state.ee_info[0]))) {
+                  LOG_E("nb_ee_info array is full");
+                  break;
+                }
                 idx = stpropnci_state.nb_ee_info;
                 stpropnci_state.ee_info[idx].nfcee_id = payload[6 + i * 5];
                 stpropnci_state.nb_ee_info++;
@@ -780,10 +785,16 @@ bool stpropnci_process_std(bool inform_only, bool dir_from_upper,
               LOG_I("NFCEE_MODE_SET_NTF: status=0x%x", payload[3]);
               // activation
               if (stpropnci_state.wait_nfcee_ntf) {
-                stpropnci_state
-                    .active_nfcee_ids[stpropnci_state.nb_active_nfcees] =
-                    stpropnci_state.waiting_nfcee_id;
-                stpropnci_state.nb_active_nfcees++;
+                if (stpropnci_state.nb_active_nfcees <
+                    (sizeof(stpropnci_state.active_nfcee_ids) /
+                     sizeof(stpropnci_state.active_nfcee_ids[0]))) {
+                  stpropnci_state
+                      .active_nfcee_ids[stpropnci_state.nb_active_nfcees] =
+                      stpropnci_state.waiting_nfcee_id;
+                  stpropnci_state.nb_active_nfcees++;
+                } else {
+                  LOG_E("nb_active_nfcees array is full");
+                }
                 if (stpropnci_state.waiting_nfcee_id == 0x86) {
                   // Calling NFCEE_POWER_AND_LINK_CTRL_CMD to set SWP always ON
                   // Create fake notif with trigger = AID
